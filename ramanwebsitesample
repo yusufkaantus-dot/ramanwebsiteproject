@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpectraBase - Raman Database</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Custom scrollbar for the list */
+        .mineral-list::-webkit-scrollbar { width: 6px; }
+        .mineral-list::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen flex flex-col overflow-hidden">
+
+    <header class="bg-blue-900 text-white p-4 shadow-md flex justify-between items-center z-10">
+        <div class="flex items-center gap-2">
+            <svg class="w-6 h-6 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            <h1 class="text-xl font-bold tracking-wide">LλMDA</span>
+        </div>
+        <div class="text-sm text-blue-200">Raman Database</div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        
+        <aside class="w-80 bg-white border-r border-gray-200 flex flex-col shadow-lg z-0">
+            <div class="p-4 border-b border-gray-100 bg-gray-50">
+                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Search Materials</label>
+                <div class="mt-1 relative">
+                    <input type="text" id="search-input" placeholder="e.g. Diamond, Quartz..." 
+                        class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm">
+                    <svg class="w-4 h-4 absolute left-3 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+            </div>
+
+            <div id="mineral-list" class="mineral-list flex-1 overflow-y-auto p-2 space-y-1">
+                </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col p-6 relative">
+            
+            <div id="info-panel" class="mb-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200 hidden">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 id="selected-name" class="text-2xl font-bold text-gray-800">Select a Mineral</h2>
+                        <p id="selected-formula" class="text-sm text-gray-500 font-mono mt-1">Formula: -</p>
+                    </div>
+                    <span id="selected-id" class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">ID: -</span>
+                </div>
+            </div>
+
+            <div class="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 p-4 relative min-h-[400px]">
+                <canvas id="ramanChart"></canvas>
+                
+                <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-white rounded-lg z-10">
+                    <svg class="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                    <p class="text-lg font-medium">Select a material to view spectrum</p>
+                </div>
+            </div>
+
+            <div class="mt-4 flex justify-end gap-2">
+                <button onclick="resetZoom()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded text-sm font-medium transition-colors shadow-sm">
+                    Reset Zoom
+                </button>
+                <button onclick="downloadData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors shadow-sm flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Download CSV
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- 1. MOCK DATABASE ---
+        // In a real app, this would come from a PostgreSQL or MongoDB database via fetch()
+        const ramanDatabase = [
+            {
+                id: "R0001",
+                name: "Diamond",
+                formula: "C",
+                description: "Native carbon. The hardest known natural mineral.",
+                // Simplified fake data for demonstration (Wavenumber, Intensity)
+                data: Array.from({length: 100}, (_, i) => {
+                    const x = 200 + i * 15;
+                    // Diamond has a massive peak at 1332 cm-1
+                    let y = Math.random() * 5; 
+                    if (x > 1300 && x < 1360) y += 100 * Math.exp(-Math.pow(x - 1332, 2) / 50);
+                    return {x, y};
+                })
+            },
+            {
+                id: "R0002",
+                name: "Quartz",
+                formula: "SiO2",
+                description: "A hard, crystalline mineral composed of silica.",
+                data: Array.from({length: 100}, (_, i) => {
+                    const x = 100 + i * 12;
+                    // Quartz main peak around 464 cm-1
+                    let y = Math.random() * 10;
+                    if (x > 440 && x < 490) y += 80 * Math.exp(-Math.pow(x - 464, 2) / 100);
+                    if (x > 200 && x < 220) y += 30; // Smaller peak
+                    return {x, y};
+                })
+            },
+            {
+                id: "R0003",
+                name: "Calcite",
+                formula: "CaCO3",
+                description: "Carbonate mineral and the most stable polymorph of calcium carbonate.",
+                data: Array.from({length: 100}, (_, i) => {
+                    const x = 100 + i * 14;
+                    // Peaks at 156, 281, 712, 1086
+                    let y = Math.random() * 5;
+                    if (x > 1060 && x < 1100) y += 90; // 1086 peak
+                    if (x > 270 && x < 290) y += 40;
+                    return {x, y};
+                })
+            },
+            {
+                id: "R0004",
+                name: "Pyrite",
+                formula: "FeS2",
+                description: "The mineral pyrite, or iron pyrite, also known as fool's gold.",
+                data: Array.from({length: 100}, (_, i) => {
+                    const x = 200 + i * 10;
+                    let y = Math.random() * 20; // Noisier baseline
+                    if (x > 330 && x < 350) y += 60; 
+                    if (x > 370 && x < 390) y += 55;
+                    return {x, y};
+                })
+            }
+        ];
+
+        // --- 2. APP LOGIC ---
+
+        let myChart = null;
+        let currentMineral = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            renderList(ramanDatabase);
+            
+            // Search Listener
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                const filtered = ramanDatabase.filter(m => 
+                    m.name.toLowerCase().includes(term) || 
+                    m.formula.toLowerCase().includes(term)
+                );
+                renderList(filtered);
+            });
+        });
+
+        // Render the Sidebar List
+        function renderList(minerals) {
+            const container = document.getElementById('mineral-list');
+            container.innerHTML = '';
+            
+            if (minerals.length === 0) {
+                container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm">No minerals found</div>';
+                return;
+            }
+
+            minerals.forEach(mineral => {
+                const el = document.createElement('div');
+                el.className = 'p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors group';
+                el.innerHTML = `
+                    <div class="font-medium text-gray-800 group-hover:text-blue-700">${mineral.name}</div>
+                    <div class="text-xs text-gray-500 flex justify-between mt-1">
+                        <span class="font-mono">${mineral.formula}</span>
+                        <span>${mineral.id}</span>
+                    </div>
+                `;
+                el.onclick = () => loadMineral(mineral);
+                container.appendChild(el);
+            });
+        }
+
+        // Load Mineral Data into Graph
+        function loadMineral(mineral) {
+            currentMineral = mineral;
+
+            // Update UI Info
+            document.getElementById('selected-name').innerText = mineral.name;
+            document.getElementById('selected-formula').innerText = `Formula: ${mineral.formula}`;
+            document.getElementById('selected-id').innerText = mineral.id;
+            
+            document.getElementById('info-panel').classList.remove('hidden');
+            document.getElementById('empty-state').classList.add('hidden');
+
+            // Draw Chart
+            drawChart(mineral);
+        }
+
+        // --- 3. CHARTING LOGIC (Chart.js) ---
+        function drawChart(mineral) {
+            const ctx = document.getElementById('ramanChart').getContext('2d');
+            
+            if (myChart) {
+                myChart.destroy();
+            }
+
+            myChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: `${mineral.name} (Raman Intensity)`,
+                        data: mineral.data,
+                        borderColor: '#2563eb', // Blue-600
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        borderWidth: 2,
+                        showLine: true, // Connect dots for spectrum look
+                        pointRadius: 0, // Hide individual dots for clean line
+                        pointHoverRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 800,
+                        easing: 'easeOutQuart'
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    },
+                    plugins: {
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleFont: { size: 13 },
+                            bodyFont: { size: 13 },
+                            padding: 10,
+                            displayColors: false,
+                            callbacks: {
+                                label: (context) => `cm⁻¹: ${context.parsed.x.toFixed(0)}, Int: ${context.parsed.y.toFixed(1)}`
+                            }
+                        },
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: {
+                                display: true,
+                                text: 'Raman Shift (cm⁻¹)',
+                                font: { weight: 'bold' }
+                            },
+                            grid: { color: '#f1f5f9' }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Intensity (a.u.)',
+                                font: { weight: 'bold' }
+                            },
+                            grid: { color: '#f1f5f9' },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function resetZoom() {
+            if (myChart) myChart.resetZoom();
+        }
+
+        function downloadData() {
+            if (!currentMineral) return;
+            
+            // Create CSV content
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Raman Shift (cm-1),Intensity\n";
+            
+            currentMineral.data.forEach(row => {
+                csvContent += `${row.x},${row.y}\n`;
+            });
+
+            // Trigger download
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `${currentMineral.name}_Raman_Spectrum.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
